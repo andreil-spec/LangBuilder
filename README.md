@@ -1,3 +1,56 @@
+
+# LangBuilder AI Agent Platform — Open Source, Enterprise-Ready, Yours to Own
+
+-   Deploy on your cloud, VPC, or even OnPrem
+-   No-code, Low-code and LangChain-based Framework
+-   AI Agents Libraries and Templates  
+ 
+CloudGeometry provides end-to-end support for platform deployment, maintenance, and AI Agent adoption through our managed services plans
+
+## The 3 Essential Layers of Enterprise AI Transformationa
+
+### Unified in the LangBuilder AIAgent Platform to enable step-by-step, accurate AI Agent adoption in your business processes
+
+1.  **Visual Editor and Workflow Designer**
+  
+An intuitive, no-code drag-and-drop IDE for business users and project managers to quickly prototype and validate AI workflows
+
+-   Prebuilt connectors to popular and domain specific data sources, and APIs
+-   Choose your own LLM: OpenAI/Claude/Bedrock/Gemini and local Mistral/LLaMA/Falcon/++
+-   RAG pipelines and Vector DBs for adding your business internal and domain knowledge
+-   Playground mode for fast experimentation and concept validation before scaling
+-   Access controls and roles for secure collaboration
+-   Reusable agent templates—e.g., for customer support, copilots, process automation, and other common use cases
+
+Based on the popular LangFlow OpenSource project with CloudGeometry AddOns enabling you to continuously run those AI Agents for your company's internal processes.
+
+2.  **Programmable AI Agent Framework**
+    
+For LLM developers to extend agents with custom logic, integrations, and advanced orchestration
+
+-   LangChain Expression Language (LCEL) for precise, expressive orchestration logic
+-   Prebuilt components and primitives
+-   Full support for memory integration, including short-term session and long-term memory out of the box
+-   Multi‑agent orchestration; use handoffs or supervisor/swarm patterns for complex workflow
+-   Rich API layer, including Control Plane & Data Plane APIs
+-   Robust concurrency and reliability
+
+Based on the popular LangChain open source project framework and LangFlow builder, with CloudGeometry AddOns enabling a seamless transition from rapid prototyping to enterprise ready and secure agents
+
+3.  **AI Agent Deployment & Management Platform**
+    
+For operations teams and business analysts who need production-ready tools for AI powered processes governance, cost optimization, and continuous improvement
+
+-   Cloud deployment with built-in CI/CD
+-   Built-in task queues and auto-scaling
+-   Checkpointers and memory storage
+-   Scalability and fault tolerance
+-   AI Quality Control AddOns
+-   Cost Control, Cloud, Data, Tokens
+-   Human‑in‑the‑loop support—pause workflows for manual intervention at any stage  
+
+Based on the popular open source projects LangGraph and Kubernetes with CloudGeometry components for quick deployment, observability and cost control.
+
 <!-- markdownlint-disable MD030 -->
 
 ![Langflow logo](./docs/static/img/langflow-logo-color-black-solid.svg)
