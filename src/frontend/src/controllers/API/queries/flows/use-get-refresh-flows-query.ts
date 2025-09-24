@@ -75,10 +75,32 @@ export const useGetRefreshFlowsQuery: useQueryFunctionType<
 
       return [];
     } catch (e) {
-      if (e instanceof AxiosError && e.status !== 403) {
-        setErrorData({
-          title: "Could not load flows from database",
-        });
+      if (e instanceof AxiosError) {
+        const status = e.response?.status || e.status;
+
+        // Don't show error popups for authentication/authorization issues
+        // These are expected in development when auth is not properly configured
+        if (status === 401 || status === 403) {
+          console.warn(
+            "⚠️ Flows API authentication error - returning empty flows:",
+            e.response?.data,
+          );
+          return [];
+        }
+
+        // Only show error popup for actual server errors
+        if (status >= 500) {
+          setErrorData({
+            title: "Could not load flows from database",
+          });
+        } else {
+          // For other errors (like 404, 422), just log them
+          console.warn("⚠️ Flows API error - returning empty flows:", {
+            status,
+            data: e.response?.data,
+          });
+          return [];
+        }
       }
       throw e;
     }

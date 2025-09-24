@@ -44,6 +44,7 @@ from langflow.interface.initialize.loading import update_params_with_load_from_d
 from langflow.processing.process import process_tweaks, run_graph_internal
 from langflow.schema.graph import Tweaks
 from langflow.services.auth.utils import api_key_security, get_current_active_user
+from langflow.services.auth.authorization_patterns import get_authorized_user, RequireFlowRead
 from langflow.services.cache.utils import save_uploaded_file
 from langflow.services.database.models.flow.model import Flow, FlowRead
 from langflow.services.database.models.flow.utils import get_all_webhook_components_in_flow
@@ -60,8 +61,10 @@ if TYPE_CHECKING:
 router = APIRouter(tags=["Base"])
 
 
-@router.get("/all", dependencies=[Depends(get_current_active_user)])
-async def get_all():
+@router.get("/all")
+async def get_all(
+    current_user: Annotated[User, Depends(get_authorized_user)],
+):
     """Retrieve all component types with compression for better performance.
 
     Returns a compressed response containing all available component types.

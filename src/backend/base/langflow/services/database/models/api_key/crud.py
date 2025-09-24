@@ -54,11 +54,50 @@ async def check_key(session: AsyncSession, api_key: str) -> User | None:
     query: SelectOfScalar = select(ApiKey).options(selectinload(ApiKey.user)).where(ApiKey.api_key == api_key)
     api_key_object: ApiKey | None = (await session.exec(query)).first()
     if api_key_object is not None:
+        # Check if API key is active
+        if not api_key_object.is_active:
+            return None
+
         settings_service = get_settings_service()
         if settings_service.settings.disable_track_apikey_usage is not True:
             await update_total_uses(api_key_object.id)
         return api_key_object.user
     return None
+
+
+async def check_key_with_scoping(session: AsyncSession, api_key: str) -> tuple[User | None, ApiKey | None]:
+    """Check if the API key is valid and return both user and API key object for scope validation."""
+    query: SelectOfScalar = (
+        select(ApiKey)
+        .options(selectinload(ApiKey.user), selectinload(ApiKey.service_account))
+        .where(ApiKey.api_key == api_key)
+    )
+
+    api_key_object: ApiKey | None = (await session.exec(query)).first()
+    if api_key_object is not None:
+        # Check if API key is active
+        if not api_key_object.is_active:
+            return None, None
+
+        # For service account tokens
+        if api_key_object.service_account_id:
+            if not api_key_object.service_account or not api_key_object.service_account.is_active:
+                return None, None
+            # Return the user who created the service account
+            user = api_key_object.service_account.created_by if api_key_object.service_account else None
+        else:
+            # For user tokens
+            user = api_key_object.user
+
+        if user and not user.is_active:
+            return None, None
+
+        settings_service = get_settings_service()
+        if settings_service.settings.disable_track_apikey_usage is not True:
+            await update_total_uses(api_key_object.id)
+
+        return user, api_key_object
+    return None, None
 
 
 async def update_total_uses(api_key_id: UUID):

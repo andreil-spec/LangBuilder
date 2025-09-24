@@ -1,8 +1,10 @@
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import ShadTooltip from "@/components/common/shadTooltipComponent";
+import { PermissionGuard } from "@/components/rbac";
 import { PLAYGROUND_BUTTON_NAME } from "@/constants/constants";
 import { CustomIOModal } from "@/customization/components/custom-new-modal";
 import { ENABLE_PUBLISH } from "@/customization/feature-flags";
+import useFlowStore from "@/stores/flowStore";
 
 interface PlaygroundButtonProps {
   hasIO: boolean;
@@ -49,21 +51,40 @@ const PlaygroundButton = ({
   setOpen,
   canvasOpen,
 }: PlaygroundButtonProps) => {
-  return hasIO ? (
-    <CustomIOModal
-      open={open}
-      setOpen={setOpen}
-      disable={!hasIO}
-      canvasOpen={canvasOpen}
+  const currentFlow = useFlowStore((state) => state.currentFlow);
+  const flowId = currentFlow?.id;
+
+  return (
+    <PermissionGuard
+      resource="flow"
+      action="execute"
+      resourceId={flowId}
+      fallback={
+        <ShadTooltip content="You don't have permission to execute this flow">
+          <div>
+            <DisabledButton />
+          </div>
+        </ShadTooltip>
+      }
+      hideIfNoPermission={false}
     >
-      <ActiveButton />
-    </CustomIOModal>
-  ) : (
-    <ShadTooltip content="Add a Chat Input or Chat Output to use the playground">
-      <div>
-        <DisabledButton />
-      </div>
-    </ShadTooltip>
+      {hasIO ? (
+        <CustomIOModal
+          open={open}
+          setOpen={setOpen}
+          disable={!hasIO}
+          canvasOpen={canvasOpen}
+        >
+          <ActiveButton />
+        </CustomIOModal>
+      ) : (
+        <ShadTooltip content="Add a Chat Input or Chat Output to use the playground">
+          <div>
+            <DisabledButton />
+          </div>
+        </ShadTooltip>
+      )}
+    </PermissionGuard>
   );
 };
 

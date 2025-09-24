@@ -1,13 +1,15 @@
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
-from uuid import UUID, uuid4
+from typing import TYPE_CHECKING, Union
+from uuid import uuid4
 
 from pydantic import ValidationInfo, field_validator
 from sqlmodel import JSON, Column, DateTime, Field, Relationship, SQLModel, func
 
+from langflow.schema.serialize import UUIDstr
 from langflow.services.variable.constants import CREDENTIAL_TYPE
 
 if TYPE_CHECKING:
+    from langflow.services.database.models.rbac.environment import Environment
     from langflow.services.database.models.user.model import User
 
 
@@ -23,7 +25,7 @@ class VariableBase(SQLModel):
 
 
 class Variable(VariableBase, table=True):  # type: ignore[call-arg]
-    id: UUID | None = Field(
+    id: UUIDstr | None = Field(
         default_factory=uuid4,
         primary_key=True,
         description="Unique ID for the variable",
@@ -41,8 +43,12 @@ class Variable(VariableBase, table=True):  # type: ignore[call-arg]
     )
     default_fields: list[str] | None = Field(sa_column=Column(JSON))
     # foreign key to user table
-    user_id: UUID = Field(description="User ID associated with this variable", foreign_key="user.id")
+    user_id: UUIDstr = Field(description="User ID associated with this variable", foreign_key="user.id")
     user: "User" = Relationship(back_populates="variables")
+
+    # RBAC - Environment scoped variables
+    environment_id: UUIDstr | None = Field(default=None, foreign_key="environment.id", nullable=True, index=True)
+    environment: Union["Environment" , None] = Relationship(back_populates="variables")
 
 
 class VariableCreate(VariableBase):
@@ -52,7 +58,7 @@ class VariableCreate(VariableBase):
 
 
 class VariableRead(SQLModel):
-    id: UUID
+    id: UUIDstr
     name: str | None = Field(None, description="Name of the variable")
     type: str | None = Field(None, description="Type of the variable")
     value: str | None = Field(None, description="Encrypted value of the variable")
@@ -67,7 +73,7 @@ class VariableRead(SQLModel):
 
 
 class VariableUpdate(SQLModel):
-    id: UUID  # Include the ID for updating
+    id: UUIDstr  # Include the ID for updating
     name: str | None = Field(None, description="Name of the variable")
     value: str | None = Field(None, description="Encrypted value of the variable")
     default_fields: list[str] | None = Field(None, description="Default fields for the variable")

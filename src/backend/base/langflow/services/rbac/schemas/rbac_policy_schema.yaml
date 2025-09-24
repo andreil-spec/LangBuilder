@@ -1,0 +1,399 @@
+# RBAC Policy Schema v1
+# This schema defines the structure for LangBuilder RBAC configurations
+# that can be used for Infrastructure-as-Code policy management
+
+$schema: "http://json-schema.org/draft-07/schema#"
+title: "LangBuilder RBAC Policy"
+description: "Schema for LangBuilder Role-Based Access Control policies"
+type: "object"
+
+properties:
+  apiVersion:
+    type: "string"
+    enum: ["langflow.org/v1"]
+    default: "langflow.org/v1"
+    description: "API version for the RBAC policy format"
+
+  kind:
+    type: "string"
+    enum: ["RBACPolicy"]
+    default: "RBACPolicy"
+    description: "Resource kind identifier"
+
+  metadata:
+    type: "object"
+    required: ["name"]
+    properties:
+      name:
+        type: "string"
+        pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        maxLength: 255
+        description: "Unique name for the RBAC policy configuration"
+
+      workspace:
+        type: "string"
+        description: "Target workspace name"
+
+      project:
+        type: "string"
+        description: "Target project name"
+
+      environment:
+        type: "string"
+        description: "Target environment name"
+
+      description:
+        type: "string"
+        maxLength: 1000
+        description: "Human-readable description of the policy"
+
+      labels:
+        type: "object"
+        additionalProperties:
+          type: "string"
+        description: "Key-value pairs for labeling and categorization"
+
+      annotations:
+        type: "object"
+        additionalProperties:
+          type: "string"
+        description: "Additional metadata annotations"
+
+      createdAt:
+        type: "string"
+        format: "date-time"
+        description: "Policy creation timestamp"
+
+      updatedAt:
+        type: "string"
+        format: "date-time"
+        description: "Policy last update timestamp"
+
+  spec:
+    type: "object"
+    properties:
+      roles:
+        type: "array"
+        items:
+          $ref: "#/definitions/Role"
+        description: "Role definitions"
+
+      permissions:
+        type: "array"
+        items:
+          $ref: "#/definitions/Permission"
+        description: "Permission definitions"
+
+      assignments:
+        type: "array"
+        items:
+          $ref: "#/definitions/Assignment"
+        description: "Role assignment definitions"
+
+      groups:
+        type: "array"
+        items:
+          $ref: "#/definitions/UserGroup"
+        description: "User group definitions"
+
+required: ["apiVersion", "kind", "metadata", "spec"]
+additionalProperties: false
+
+definitions:
+  Role:
+    type: "object"
+    required: ["name"]
+    properties:
+      name:
+        type: "string"
+        pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        maxLength: 255
+        description: "Unique role name"
+
+      description:
+        type: "string"
+        maxLength: 500
+        description: "Role description"
+
+      type:
+        type: "string"
+        enum: ["system", "workspace", "project", "environment", "custom"]
+        default: "custom"
+        description: "Role type and scope"
+
+      permissions:
+        type: "array"
+        items:
+          type: "string"
+        description: "List of permission names granted to this role"
+
+      parentRole:
+        type: "string"
+        description: "Parent role for inheritance"
+
+      priority:
+        type: "integer"
+        minimum: 1
+        maximum: 1000
+        default: 100
+        description: "Role priority for conflict resolution"
+
+      isSystem:
+        type: "boolean"
+        default: false
+        description: "Whether this is a system-defined role"
+
+      isDefault:
+        type: "boolean"
+        default: false
+        description: "Whether this is a default role for new users"
+
+      scopeType:
+        type: "string"
+        enum: ["global", "workspace", "project", "environment", "flow", "component"]
+        description: "Scope where this role applies"
+
+      scopeId:
+        type: "string"
+        description: "Specific scope identifier"
+
+      metadata:
+        type: "object"
+        additionalProperties: true
+        description: "Additional role metadata"
+
+      tags:
+        type: "array"
+        items:
+          type: "string"
+        description: "Role tags for organization"
+
+    additionalProperties: false
+
+  Permission:
+    type: "object"
+    required: ["name", "resourceType", "action"]
+    properties:
+      name:
+        type: "string"
+        pattern: "^[a-z0-9]([a-z0-9-:]*[a-z0-9])?$"
+        maxLength: 255
+        description: "Unique permission name (e.g., 'flow:read')"
+
+      description:
+        type: "string"
+        maxLength: 500
+        description: "Permission description"
+
+      resourceType:
+        type: "string"
+        enum: [
+          "workspace", "project", "environment", "flow", "component",
+          "user", "role", "permission", "audit", "api_key", "variable",
+          "folder", "service_account"
+        ]
+        description: "Type of resource this permission applies to"
+
+      action:
+        type: "string"
+        enum: [
+          "read", "write", "delete", "execute", "deploy", "admin",
+          "create", "update", "list", "view", "manage", "audit"
+        ]
+        description: "Action allowed on the resource"
+
+      scopeType:
+        type: "string"
+        enum: ["global", "workspace", "project", "environment", "flow", "component"]
+        description: "Scope where this permission applies"
+
+      conditions:
+        type: "object"
+        additionalProperties: true
+        description: "Conditional logic for permission evaluation"
+
+      metadata:
+        type: "object"
+        additionalProperties: true
+        description: "Additional permission metadata"
+
+      tags:
+        type: "array"
+        items:
+          type: "string"
+        description: "Permission tags for organization"
+
+    additionalProperties: false
+
+  Assignment:
+    type: "object"
+    required: ["roles", "scopeType"]
+    oneOf:
+      - required: ["user"]
+      - required: ["group"]
+      - required: ["serviceAccount"]
+    properties:
+      user:
+        type: "string"
+        format: "email"
+        description: "User email or username"
+
+      group:
+        type: "string"
+        description: "User group name"
+
+      serviceAccount:
+        type: "string"
+        description: "Service account name"
+
+      roles:
+        type: "array"
+        items:
+          type: "string"
+        minItems: 1
+        description: "List of role names to assign"
+
+      scopeType:
+        type: "string"
+        enum: ["global", "workspace", "project", "environment", "flow", "component"]
+        description: "Scope of the assignment"
+
+      scopeId:
+        type: "string"
+        description: "Specific scope identifier"
+
+      expiresAt:
+        type: "string"
+        format: "date-time"
+        description: "Assignment expiration timestamp"
+
+      conditions:
+        type: "object"
+        additionalProperties: true
+        description: "Conditional logic for assignment"
+
+      metadata:
+        type: "object"
+        additionalProperties: true
+        description: "Additional assignment metadata"
+
+    additionalProperties: false
+
+  UserGroup:
+    type: "object"
+    required: ["name"]
+    properties:
+      name:
+        type: "string"
+        pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        maxLength: 255
+        description: "Unique group name"
+
+      description:
+        type: "string"
+        maxLength: 500
+        description: "Group description"
+
+      type:
+        type: "string"
+        enum: ["local", "synced", "dynamic", "team", "project"]
+        default: "local"
+        description: "Group type and management method"
+
+      members:
+        type: "array"
+        items:
+          type: "string"
+          format: "email"
+        description: "List of member email addresses or usernames"
+
+      autoAssignRoles:
+        type: "array"
+        items:
+          type: "string"
+        description: "Roles automatically assigned to group members"
+
+      membershipRules:
+        type: "object"
+        additionalProperties: true
+        description: "Rules for dynamic group membership"
+
+      maxMembers:
+        type: "integer"
+        minimum: 1
+        description: "Maximum number of group members"
+
+      metadata:
+        type: "object"
+        additionalProperties: true
+        description: "Additional group metadata"
+
+      tags:
+        type: "array"
+        items:
+          type: "string"
+        description: "Group tags for organization"
+
+    additionalProperties: false
+
+examples:
+  - apiVersion: "langflow.org/v1"
+    kind: "RBACPolicy"
+    metadata:
+      name: "production-workspace-rbac"
+      workspace: "production"
+      description: "RBAC configuration for production workspace"
+      labels:
+        environment: "production"
+        team: "ml-platform"
+    spec:
+      permissions:
+        - name: "flow:read"
+          description: "Read flows and their configurations"
+          resourceType: "flow"
+          action: "read"
+        - name: "flow:execute"
+          description: "Execute flows"
+          resourceType: "flow"
+          action: "execute"
+        - name: "flow:deploy"
+          description: "Deploy flows to production"
+          resourceType: "flow"
+          action: "deploy"
+
+      roles:
+        - name: "data-scientist"
+          description: "Data scientists can read and execute flows"
+          permissions:
+            - "flow:read"
+            - "flow:execute"
+          priority: 100
+
+        - name: "ml-engineer"
+          description: "ML engineers can deploy flows"
+          permissions:
+            - "flow:read"
+            - "flow:execute"
+            - "flow:deploy"
+          priority: 200
+
+      groups:
+        - name: "data-science-team"
+          description: "Data science team members"
+          type: "team"
+          members:
+            - "alice@company.com"
+            - "bob@company.com"
+          autoAssignRoles:
+            - "data-scientist"
+
+      assignments:
+        - user: "lead@company.com"
+          roles:
+            - "ml-engineer"
+          scopeType: "workspace"
+
+        - group: "data-science-team"
+          roles:
+            - "data-scientist"
+          scopeType: "workspace"

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import LangflowLogo from "@/assets/LangflowLogo.svg?react";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import ShadTooltip from "@/components/common/shadTooltipComponent";
+import { PermissionGuard, useRBACPermissions } from "@/components/rbac";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -101,10 +102,7 @@ const HeaderComponent = ({
         <div className="h-7 w-10 transition-all group-data-[open=true]/sidebar-wrapper:md:w-0 lg:hidden">
           <div className="relative left-0 opacity-100 transition-all group-data-[open=true]/sidebar-wrapper:md:opacity-0">
             <SidebarTrigger>
-              <LangflowLogo
-                aria-hidden="true"
-                className="h-4 w-4"
-              />
+              <LangflowLogo aria-hidden="true" className="h-4 w-4" />
             </SidebarTrigger>
           </div>
         </div>
@@ -201,46 +199,80 @@ const HeaderComponent = ({
                     <ForwardedIconComponent name="Download" />
                   </Button>
 
-                  <DeleteConfirmationModal
-                    onConfirm={handleDelete}
-                    description={"flow" + (selectedFlows.length > 1 ? "s" : "")}
-                    note={
-                      "and " +
-                      (selectedFlows.length > 1 ? "their" : "its") +
-                      " message history"
-                    }
-                  >
-                    <Button
-                      variant="destructive"
-                      size="iconMd"
-                      className="px-2.5 !text-mmd"
-                      data-testid="delete-bulk-btn"
-                      loading={isDeleting}
+                  <PermissionGuard resource="flow" action="delete">
+                    <DeleteConfirmationModal
+                      onConfirm={handleDelete}
+                      description={
+                        "flow" + (selectedFlows.length > 1 ? "s" : "")
+                      }
+                      note={
+                        "and " +
+                        (selectedFlows.length > 1 ? "their" : "its") +
+                        " message history"
+                      }
                     >
-                      <ForwardedIconComponent name="Trash2" />
-                      Delete
-                    </Button>
-                  </DeleteConfirmationModal>
+                      <Button
+                        variant="destructive"
+                        size="iconMd"
+                        className="px-2.5 !text-mmd"
+                        data-testid="delete-bulk-btn"
+                        loading={isDeleting}
+                      >
+                        <ForwardedIconComponent name="Trash2" />
+                        Delete
+                      </Button>
+                    </DeleteConfirmationModal>
+                  </PermissionGuard>
                 </div>
-                <ShadTooltip content="New Flow" side="bottom">
-                  <Button
-                    variant="default"
-                    size="iconMd"
-                    className="z-50 px-2.5 !text-mmd"
-                    onClick={() => setNewProjectModal(true)}
-                    id="new-project-btn"
-                    data-testid="new-project-btn"
-                  >
-                    <ForwardedIconComponent
-                      name="Plus"
-                      aria-hidden="true"
-                      className="h-4 w-4"
-                    />
-                    <span className="hidden whitespace-nowrap font-semibold md:inline">
-                      New Flow
-                    </span>
-                  </Button>
-                </ShadTooltip>
+                <PermissionGuard
+                  resource="flow"
+                  action="create"
+                  fallback={
+                    <ShadTooltip
+                      content="You don't have permission to create new flows"
+                      side="bottom"
+                    >
+                      <Button
+                        variant="default"
+                        size="iconMd"
+                        className="z-50 px-2.5 !text-mmd opacity-50 cursor-not-allowed"
+                        disabled
+                        id="new-project-btn-disabled"
+                        data-testid="new-project-btn-disabled"
+                      >
+                        <ForwardedIconComponent
+                          name="Plus"
+                          aria-hidden="true"
+                          className="h-4 w-4"
+                        />
+                        <span className="hidden whitespace-nowrap font-semibold md:inline">
+                          New Flow
+                        </span>
+                      </Button>
+                    </ShadTooltip>
+                  }
+                  hideIfNoPermission={false}
+                >
+                  <ShadTooltip content="New Flow" side="bottom">
+                    <Button
+                      variant="default"
+                      size="iconMd"
+                      className="z-50 px-2.5 !text-mmd"
+                      onClick={() => setNewProjectModal(true)}
+                      id="new-project-btn"
+                      data-testid="new-project-btn"
+                    >
+                      <ForwardedIconComponent
+                        name="Plus"
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                      />
+                      <span className="hidden whitespace-nowrap font-semibold md:inline">
+                        New Flow
+                      </span>
+                    </Button>
+                  </ShadTooltip>
+                </PermissionGuard>
               </div>
             </div>
           )}

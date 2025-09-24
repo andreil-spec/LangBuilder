@@ -2,9 +2,12 @@ import contextlib
 import json
 from io import BytesIO
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from langflow.api.utils import CurrentActiveUser, DbSession
+from langflow.services.auth.mcp_auth import get_mcp_authorized_user, RequireMCPRead, RequireMCPWrite, RequireMCPDelete
 from langflow.api.v2.files import MCP_SERVERS_FILE, delete_file, download_file, get_file_by_name, upload_user_file
 from langflow.base.mcp.util import update_tools
 from langflow.logging import logger
@@ -111,11 +114,12 @@ async def get_server(
 # Define a Get servers endpoint
 @router.get("/servers")
 async def get_servers(
-    current_user: CurrentActiveUser,
+    current_user: Annotated[CurrentActiveUser, Depends(get_mcp_authorized_user)],
     session: DbSession,
     storage_service=Depends(get_storage_service),
     settings_service=Depends(get_settings_service),
     action_count: bool | None = None,
+    _mcp_read_check: Annotated[bool, RequireMCPRead] = True,
 ):
     """Get the list of available servers."""
     import asyncio
@@ -188,10 +192,11 @@ async def get_servers(
 @router.get("/servers/{server_name}")
 async def get_server_endpoint(
     server_name: str,
-    current_user: CurrentActiveUser,
+    current_user: Annotated[CurrentActiveUser, Depends(get_mcp_authorized_user)],
     session: DbSession,
     storage_service=Depends(get_storage_service),
     settings_service=Depends(get_settings_service),
+    _mcp_read_check: Annotated[bool, RequireMCPRead] = True,
 ):
     """Get a specific server."""
     return await get_server(server_name, current_user, session, storage_service, settings_service)
@@ -248,10 +253,11 @@ async def update_server(
 async def add_server(
     server_name: str,
     server_config: dict,
-    current_user: CurrentActiveUser,
+    current_user: Annotated[CurrentActiveUser, Depends(get_mcp_authorized_user)],
     session: DbSession,
     storage_service=Depends(get_storage_service),
     settings_service=Depends(get_settings_service),
+    _mcp_write_check: Annotated[bool, RequireMCPWrite] = True,
 ):
     return await update_server(
         server_name,
@@ -268,10 +274,11 @@ async def add_server(
 async def update_server_endpoint(
     server_name: str,
     server_config: dict,
-    current_user: CurrentActiveUser,
+    current_user: Annotated[CurrentActiveUser, Depends(get_mcp_authorized_user)],
     session: DbSession,
     storage_service=Depends(get_storage_service),
     settings_service=Depends(get_settings_service),
+    _mcp_write_check: Annotated[bool, RequireMCPWrite] = True,
 ):
     return await update_server(
         server_name,
@@ -286,10 +293,11 @@ async def update_server_endpoint(
 @router.delete("/servers/{server_name}")
 async def delete_server(
     server_name: str,
-    current_user: CurrentActiveUser,
+    current_user: Annotated[CurrentActiveUser, Depends(get_mcp_authorized_user)],
     session: DbSession,
     storage_service=Depends(get_storage_service),
     settings_service=Depends(get_settings_service),
+    _mcp_delete_check: Annotated[bool, RequireMCPDelete] = True,
 ):
     return await update_server(
         server_name,

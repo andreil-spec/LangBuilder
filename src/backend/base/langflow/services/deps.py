@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from langflow.services.telemetry.service import TelemetryService
     from langflow.services.tracing.service import TracingService
     from langflow.services.variable.service import VariableService
+    from langflow.services.rbac.service import RBACService
 
 
 def get_service(service_type: ServiceType, default=None):
@@ -247,3 +248,14 @@ def get_queue_service() -> JobQueueService:
     from langflow.services.job_queue.factory import JobQueueServiceFactory
 
     return get_service(ServiceType.JOB_QUEUE_SERVICE, JobQueueServiceFactory())
+
+
+def get_rbac_service() -> "RBACService":
+    """Retrieves the RBACService instance from the service manager.
+
+    Returns:
+        RBACService: The RBACService instance.
+    """
+    from langflow.services.rbac.factory import RBACServiceFactory
+
+    return get_service(ServiceType.RBAC_SERVICE, RBACServiceFactory())

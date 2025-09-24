@@ -5,7 +5,7 @@ import sys
 from collections import deque
 from pathlib import Path
 from threading import Lock, Semaphore
-from typing import TypedDict
+from typing import TypedDict, Union
 
 import orjson
 from loguru import logger
@@ -176,13 +176,13 @@ def is_valid_log_format(format_string) -> bool:
 
 def configure(
     *,
-    log_level: str | None = None,
-    log_file: Path | None = None,
-    disable: bool | None = False,
-    log_env: str | None = None,
-    log_format: str | None = None,
+    log_level: Union[str, None] = None,
+    log_file: Union[Path, None] = None,
+    disable: Union[bool, None] = False,
+    log_env: Union[str, None] = None,
+    log_format: Union[str, None] = None,
     async_file: bool = False,
-    log_rotation: str | None = None,
+    log_rotation: Union[str, None] = None,
 ) -> None:
     if disable and log_level is None and log_file is None:
         logger.disable("langflow")

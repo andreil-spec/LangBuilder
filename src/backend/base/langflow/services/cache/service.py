@@ -299,7 +299,7 @@ class AsyncInMemoryCache(AsyncBaseCacheService, Generic[AsyncLockType]):
         self.max_size = max_size
         self.expiration_time = expiration_time
 
-    async def get(self, key, lock: asyncio.Lock | None = None):
+    async def get(self, key, lock: Union[asyncio.Lock, None] = None):
         async with lock or self.lock:
             return await self._get(key)
 
@@ -313,7 +313,7 @@ class AsyncInMemoryCache(AsyncBaseCacheService, Generic[AsyncLockType]):
             await self._delete(key)  # Log before deleting the expired item
         return CACHE_MISS
 
-    async def set(self, key, value, lock: asyncio.Lock | None = None) -> None:
+    async def set(self, key, value, lock: Union[asyncio.Lock, None] = None) -> None:
         async with lock or self.lock:
             await self._set(
                 key,
@@ -326,7 +326,7 @@ class AsyncInMemoryCache(AsyncBaseCacheService, Generic[AsyncLockType]):
         self.cache[key] = {"value": value, "time": time.time()}
         self.cache.move_to_end(key)
 
-    async def delete(self, key, lock: asyncio.Lock | None = None) -> None:
+    async def delete(self, key, lock: Union[asyncio.Lock, None] = None) -> None:
         async with lock or self.lock:
             await self._delete(key)
 
@@ -334,17 +334,17 @@ class AsyncInMemoryCache(AsyncBaseCacheService, Generic[AsyncLockType]):
         if key in self.cache:
             del self.cache[key]
 
-    async def clear(self, lock: asyncio.Lock | None = None) -> None:
+    async def clear(self, lock: Union[asyncio.Lock, None] = None) -> None:
         async with lock or self.lock:
             await self._clear()
 
     async def _clear(self) -> None:
         self.cache.clear()
 
-    async def upsert(self, key, value, lock: asyncio.Lock | None = None) -> None:
+    async def upsert(self, key, value, lock: Union[asyncio.Lock, None] = None) -> None:
         await self._upsert(key, value, lock)
 
-    async def _upsert(self, key, value, lock: asyncio.Lock | None = None) -> None:
+    async def _upsert(self, key, value, lock: Union[asyncio.Lock, None] = None) -> None:
         existing_value = await self.get(key, lock)
         if existing_value is not None and isinstance(existing_value, dict) and isinstance(value, dict):
             existing_value.update(value)

@@ -73,8 +73,23 @@ async def upload_file(
 
 @router.get("/download/{flow_id}/{file_name}")
 async def download_file(
-    file_name: str, flow_id: UUID, storage_service: Annotated[StorageService, Depends(get_storage_service)]
+    file_name: str,
+    flow_id: UUID,
+    current_user: CurrentActiveUser,
+    session: DbSession,
+    storage_service: Annotated[StorageService, Depends(get_storage_service)],
 ):
+    # RBAC: Check if user has permission to read the flow and its files
+    flow = await session.get(Flow, flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    # Basic ownership check (will be enhanced with RBAC permission engine)
+    if flow.user_id != current_user.id:
+        # TODO: Integrate with permission engine to check flow:read permission
+        # For now, check basic ownership
+        raise HTTPException(status_code=403, detail="You don't have access to this flow")
+
     flow_id_str = str(flow_id)
     extension = file_name.split(".")[-1]
 
@@ -101,7 +116,18 @@ async def download_file(
 
 
 @router.get("/images/{flow_id}/{file_name}")
-async def download_image(file_name: str, flow_id: UUID):
+async def download_image(file_name: str, flow_id: UUID, current_user: CurrentActiveUser, session: DbSession):
+    # RBAC: Check if user has permission to read the flow and its images
+    flow = await session.get(Flow, flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    # Basic ownership check (will be enhanced with RBAC permission engine)
+    if flow.user_id != current_user.id:
+        # TODO: Integrate with permission engine to check flow:read permission
+        # For now, check basic ownership
+        raise HTTPException(status_code=403, detail="You don't have access to this flow")
+
     storage_service = get_storage_service()
     extension = file_name.split(".")[-1]
     flow_id_str = str(flow_id)

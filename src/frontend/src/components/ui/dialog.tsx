@@ -3,7 +3,7 @@ import { Cross2Icon } from "@radix-ui/react-icons";
 import * as React from "react";
 import DialogContentWithouFixed from "@/customization/components/custom-dialog-content-without-fixed";
 import { dialogClass } from "@/customization/utils/dialog-class";
-import { cn } from "../../utils/utils";
+import { cn } from "@/utils/utils";
 import ShadTooltip from "../common/shadTooltipComponent";
 
 const Dialog = DialogPrimitive.Root;

@@ -1,5 +1,6 @@
 import type { SelectionChangedEvent } from "ag-grid-community";
 import { useContext, useEffect, useState } from "react";
+import { PermissionGuard } from "@/components/rbac";
 import {
   DEL_KEY_ERROR_ALERT,
   DEL_KEY_ERROR_ALERT_PLURAL,
@@ -82,28 +83,46 @@ export default function ApiKeysPage() {
   const columnDefs = getColumnDefs();
 
   return (
-    <div className="flex h-full w-full flex-col justify-between gap-6">
-      <ApiKeyHeaderComponent
-        selectedRows={selectedRows}
-        fetchApiKeys={getApiKeysQuery}
-        userId={userId}
-      />
-
-      <div className="flex h-full w-full flex-col justify-between">
-        <TableComponent
-          key={"apiKeys"}
-          onDelete={handleDeleteApi}
-          overlayNoRowsTemplate="No data available"
-          onSelectionChanged={(event: SelectionChangedEvent) => {
-            setSelectedRows(event.api.getSelectedRows().map((row) => row.id));
-          }}
-          rowSelection="multiple"
-          suppressRowClickSelection={true}
-          pagination={true}
-          columnDefs={columnDefs}
-          rowData={keysList}
+    <PermissionGuard
+      resource="api_key"
+      action="read"
+      fallback={
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="text-center">
+            <h3 className="text-lg font-medium text-muted-foreground mb-2">
+              Access Denied
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              You don't have permission to view API keys.
+            </p>
+          </div>
+        </div>
+      }
+      hideIfNoPermission={false}
+    >
+      <div className="flex h-full w-full flex-col justify-between gap-6">
+        <ApiKeyHeaderComponent
+          selectedRows={selectedRows}
+          fetchApiKeys={getApiKeysQuery}
+          userId={userId}
         />
+
+        <div className="flex h-full w-full flex-col justify-between">
+          <TableComponent
+            key={"apiKeys"}
+            onDelete={handleDeleteApi}
+            overlayNoRowsTemplate="No data available"
+            onSelectionChanged={(event: SelectionChangedEvent) => {
+              setSelectedRows(event.api.getSelectedRows().map((row) => row.id));
+            }}
+            rowSelection="multiple"
+            suppressRowClickSelection={true}
+            pagination={true}
+            columnDefs={columnDefs}
+            rowData={keysList}
+          />
+        </div>
       </div>
-    </div>
+    </PermissionGuard>
   );
 }

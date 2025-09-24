@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useHref } from "react-router-dom";
 import IconComponent from "@/components/common/genericIconComponent";
 import ShadTooltipComponent from "@/components/common/shadTooltipComponent";
+import { ConditionalPermission, PermissionGuard } from "@/components/rbac";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -98,21 +99,26 @@ export default function PublishDropdown() {
           align="end"
           className="w-full min-w-[275px]"
         >
-          <DropdownMenuItem
-            className="deploy-dropdown-item group"
-            onClick={() => setOpenApiModal(true)}
-            data-testid="api-access-item"
-          >
-            <IconComponent name="Code2" className={`icon-size mr-2`} />
-            <span>API access</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="deploy-dropdown-item group"
-            onClick={() => setOpenExportModal(true)}
-          >
-            <IconComponent name="Download" className={`icon-size mr-2`} />
-            <span>Export</span>
-          </DropdownMenuItem>
+          <PermissionGuard resource="flow" action="read" resourceId={flowId}>
+            <DropdownMenuItem
+              className="deploy-dropdown-item group"
+              onClick={() => setOpenApiModal(true)}
+              data-testid="api-access-item"
+            >
+              <IconComponent name="Code2" className={`icon-size mr-2`} />
+              <span>API access</span>
+            </DropdownMenuItem>
+          </PermissionGuard>
+
+          <PermissionGuard resource="flow" action="export" resourceId={flowId}>
+            <DropdownMenuItem
+              className="deploy-dropdown-item group"
+              onClick={() => setOpenExportModal(true)}
+            >
+              <IconComponent name="Download" className={`icon-size mr-2`} />
+              <span>Export</span>
+            </DropdownMenuItem>
+          </PermissionGuard>
           <CustomLink
             className={cn("flex-1")}
             to={`/mcp/folder/${folderId}`}
@@ -142,63 +148,75 @@ export default function PublishDropdown() {
           )}
 
           {ENABLE_PUBLISH && (
-            <DropdownMenuItem
-              className="deploy-dropdown-item group"
-              disabled={!hasIO}
-              onClick={() => {}}
-              data-testid="shareable-playground"
-            >
-              <div className="flex w-full items-center justify-between">
-                <div className="flex items-center">
-                  <ShadTooltipComponent
-                    styleClasses="truncate"
-                    side="left"
-                    content={
-                      hasIO
-                        ? isPublished
-                          ? encodeURI(`${domain}/playground/${flowId}`)
-                          : "Activate to share a public version of this Playground"
-                        : "Add a Chat Input or Chat Output to access your flow"
-                    }
-                  >
-                    <div className="flex items-center">
-                      <IconComponent
-                        name="Globe"
-                        className={cn(
-                          `icon-size mr-2`,
-                          !isPublished && "opacity-50",
-                        )}
-                      />
+            <PermissionGuard resource="flow" action="share" resourceId={flowId}>
+              <DropdownMenuItem
+                className="deploy-dropdown-item group"
+                disabled={!hasIO}
+                onClick={() => {}}
+                data-testid="shareable-playground"
+              >
+                <div className="flex w-full items-center justify-between">
+                  <div className="flex items-center">
+                    <ShadTooltipComponent
+                      styleClasses="truncate"
+                      side="left"
+                      content={
+                        hasIO
+                          ? isPublished
+                            ? encodeURI(`${domain}/playground/${flowId}`)
+                            : "Activate to share a public version of this Playground"
+                          : "Add a Chat Input or Chat Output to access your flow"
+                      }
+                    >
+                      <div className="flex items-center">
+                        <IconComponent
+                          name="Globe"
+                          className={cn(
+                            `icon-size mr-2`,
+                            !isPublished && "opacity-50",
+                          )}
+                        />
 
-                      {isPublished ? (
-                        <CustomLink
-                          className="flex-1"
-                          to={`/playground/${flowId}`}
-                          target="_blank"
-                        >
-                          <span>Shareable Playground</span>
-                        </CustomLink>
-                      ) : (
-                        <span className={cn(!isPublished && "opacity-50")}>
-                          Shareable Playground
-                        </span>
-                      )}
-                    </div>
-                  </ShadTooltipComponent>
+                        {isPublished ? (
+                          <CustomLink
+                            className="flex-1"
+                            to={`/playground/${flowId}`}
+                            target="_blank"
+                          >
+                            <span>Shareable Playground</span>
+                          </CustomLink>
+                        ) : (
+                          <span className={cn(!isPublished && "opacity-50")}>
+                            Shareable Playground
+                          </span>
+                        )}
+                      </div>
+                    </ShadTooltipComponent>
+                  </div>
+                  <ConditionalPermission
+                    resource="flow"
+                    action="update"
+                    resourceId={flowId}
+                  >
+                    {(canUpdate) => (
+                      <Switch
+                        data-testid="publish-switch"
+                        className="scale-[85%]"
+                        checked={isPublished}
+                        disabled={!hasIO || !canUpdate}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (canUpdate) {
+                            handlePublishedSwitch(isPublished);
+                          }
+                        }}
+                      />
+                    )}
+                  </ConditionalPermission>
                 </div>
-                <Switch
-                  data-testid="publish-switch"
-                  className="scale-[85%]"
-                  checked={isPublished}
-                  disabled={!hasIO}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handlePublishedSwitch(isPublished);
-                  }}
-                />
-              </div>
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            </PermissionGuard>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

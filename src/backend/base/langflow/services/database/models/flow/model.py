@@ -3,7 +3,7 @@
 import re
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import Union, List
 from uuid import UUID, uuid4
 
 import emoji
@@ -16,15 +16,20 @@ from pydantic import (
     field_serializer,
     field_validator,
 )
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import CHAR, Enum as SQLEnum
 from sqlalchemy import Text, UniqueConstraint, text
+# from sqlalchemy.orm import Mapped  # Removed - use quoted strings for SQLModel relationships
 from sqlmodel import JSON, Column, Field, Relationship, SQLModel
 
 from langflow.schema.data import Data
+from langflow.schema.serialize import UUIDstr, UUIDAsString
 
-if TYPE_CHECKING:
-    from langflow.services.database.models.folder.model import Folder
-    from langflow.services.database.models.user.model import User
+# if TYPE_CHECKING:
+#     from langflow.services.database.models.folder.model import Folder
+#     from langflow.services.database.models.rbac.environment import Environment
+#     from langflow.services.database.models.rbac.project import Project
+#     from langflow.services.database.models.rbac.role_assignment import RoleAssignment
+#     from langflow.services.database.models.user.model import User
 
 HEX_COLOR_LENGTH = 7
 
@@ -39,22 +44,22 @@ class FlowBase(SQLModel):
     __mapper_args__ = {"confirm_deleted_rows": False}
 
     name: str = Field(index=True)
-    description: str | None = Field(default=None, sa_column=Column(Text, index=True, nullable=True))
-    icon: str | None = Field(default=None, nullable=True)
-    icon_bg_color: str | None = Field(default=None, nullable=True)
-    gradient: str | None = Field(default=None, nullable=True)
-    data: dict | None = Field(default=None, nullable=True)
-    is_component: bool | None = Field(default=False, nullable=True)
-    updated_at: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=True)
-    webhook: bool | None = Field(default=False, nullable=True, description="Can be used on the webhook endpoint")
-    endpoint_name: str | None = Field(default=None, nullable=True, index=True)
-    tags: list[str] | None = None
-    locked: bool | None = Field(default=False, nullable=True)
-    mcp_enabled: bool | None = Field(default=False, nullable=True, description="Can be exposed in the MCP server")
-    action_name: str | None = Field(
+    description: Union[str, None] = Field(default=None, sa_column=Column(Text, index=True, nullable=True))
+    icon: Union[str, None] = Field(default=None, nullable=True)
+    icon_bg_color: Union[str, None] = Field(default=None, nullable=True)
+    gradient: Union[str, None] = Field(default=None, nullable=True)
+    data: Union[dict, None] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    is_component: Union[bool, None] = Field(default=False, nullable=True)
+    updated_at: Union[datetime, None] = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=True)
+    webhook: Union[bool, None] = Field(default=False, nullable=True, description="Can be used on the webhook endpoint")
+    endpoint_name: Union[str, None] = Field(default=None, nullable=True, index=True)
+    tags: Union[List[str], None] = None
+    locked: Union[bool, None] = Field(default=False, nullable=True)
+    mcp_enabled: Union[bool, None] = Field(default=False, nullable=True, description="Can be exposed in the MCP server")
+    action_name: Union[str, None] = Field(
         default=None, nullable=True, description="The name of the action associated with the flow"
     )
-    action_description: str | None = Field(
+    action_description: Union[str, None] = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
         description="The description of the action associated with the flow",
@@ -189,16 +194,27 @@ class FlowBase(SQLModel):
 
 
 class Flow(FlowBase, table=True):  # type: ignore[call-arg]
-    id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
-    data: dict | None = Field(default=None, sa_column=Column(JSON))
-    user_id: UUID | None = Field(index=True, foreign_key="user.id", nullable=True)
+    id: UUIDstr = Field(default_factory=uuid4, primary_key=True, unique=True, sa_type=UUIDAsString)
+    data: Union[dict, None] = Field(default=None, sa_column=Column(JSON))
+    user_id: Union[UUIDstr, None] = Field(index=True, foreign_key="user.id", nullable=True, sa_type=UUIDAsString)
     user: "User" = Relationship(back_populates="flows")
-    icon: str | None = Field(default=None, nullable=True)
-    tags: list[str] | None = Field(sa_column=Column(JSON), default=[])
-    locked: bool | None = Field(default=False, nullable=True)
-    folder_id: UUID | None = Field(default=None, foreign_key="folder.id", nullable=True, index=True)
-    fs_path: str | None = Field(default=None, nullable=True)
-    folder: Optional["Folder"] = Relationship(back_populates="flows")
+    icon: Union[str, None] = Field(default=None, nullable=True)
+    tags: Union[List[str], None] = Field(sa_column=Column(JSON), default=[])
+    locked: Union[bool, None] = Field(default=False, nullable=True)
+    folder_id: Union[UUIDstr, None] = Field(default=None, foreign_key="folder.id", nullable=True, index=True, sa_type=UUIDAsString)
+    fs_path: Union[str, None] = Field(default=None, nullable=True)
+    folder: Union["Folder", None] = Relationship(back_populates="flows")
+
+    # RBAC relationships
+    project_id: Union[UUIDstr, None] = Field(default=None, foreign_key="project.id", nullable=True, index=True, sa_type=UUIDAsString)
+    project: Union["Project", None] = Relationship(back_populates="flows")
+
+    environment_id: Union[UUIDstr, None] = Field(default=None, foreign_key="environment.id", nullable=True, index=True, sa_type=UUIDAsString)
+    environment: Union["Environment", None] = Relationship(back_populates="flows")
+
+    role_assignments: List["RoleAssignment"] = Relationship(
+        back_populates="flow", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
     def to_data(self):
         serialized = self.model_dump()
@@ -218,16 +234,16 @@ class Flow(FlowBase, table=True):  # type: ignore[call-arg]
 
 
 class FlowCreate(FlowBase):
-    user_id: UUID | None = None
-    folder_id: UUID | None = None
-    fs_path: str | None = None
+    user_id: Union[UUID, None] = None
+    folder_id: Union[UUIDstr, None] = None
+    fs_path: Union[str, None] = None
 
 
 class FlowRead(FlowBase):
     id: UUID
-    user_id: UUID | None = Field()
-    folder_id: UUID | None = Field()
-    tags: list[str] | None = Field(None, description="The tags of the flow")
+    user_id: Union[UUID, None] = Field()
+    folder_id: Union[UUIDstr, None] = Field()
+    tags: Union[list[str], None] = Field(None, description="The tags of the flow")
 
 
 class FlowHeader(BaseModel):
@@ -235,19 +251,19 @@ class FlowHeader(BaseModel):
 
     id: UUID = Field(description="Unique identifier for the flow")
     name: str = Field(description="The name of the flow")
-    folder_id: UUID | None = Field(
+    folder_id: Union[UUIDstr, None] = Field(
         None,
         description="The ID of the folder containing the flow. None if not associated with a folder",
     )
-    is_component: bool | None = Field(None, description="Flag indicating whether the flow is a component")
-    endpoint_name: str | None = Field(None, description="The name of the endpoint associated with this flow")
-    description: str | None = Field(None, description="A description of the flow")
-    data: dict | None = Field(None, description="The data of the component, if is_component is True")
-    access_type: AccessTypeEnum | None = Field(None, description="The access type of the flow")
-    tags: list[str] | None = Field(None, description="The tags of the flow")
-    mcp_enabled: bool | None = Field(None, description="Flag indicating whether the flow is exposed in the MCP server")
-    action_name: str | None = Field(None, description="The name of the action associated with the flow")
-    action_description: str | None = Field(None, description="The description of the action associated with the flow")
+    is_component: Union[bool, None] = Field(None, description="Flag indicating whether the flow is a component")
+    endpoint_name: Union[str, None] = Field(None, description="The name of the endpoint associated with this flow")
+    description: Union[str, None] = Field(None, description="A description of the flow")
+    data: Union[dict, None] = Field(None, description="The data of the component, if is_component is True", sa_column=Column(JSON))
+    access_type: Union[AccessTypeEnum, None] = Field(None, description="The access type of the flow")
+    tags: Union[list[str], None] = Field(None, description="The tags of the flow")
+    mcp_enabled: Union[bool, None] = Field(None, description="Flag indicating whether the flow is exposed in the MCP server")
+    action_name: Union[str, None] = Field(None, description="The name of the action associated with the flow")
+    action_description: Union[str, None] = Field(None, description="The description of the action associated with the flow")
 
     @field_validator("data", mode="before")
     @classmethod
@@ -258,17 +274,17 @@ class FlowHeader(BaseModel):
 
 
 class FlowUpdate(SQLModel):
-    name: str | None = None
-    description: str | None = None
-    data: dict | None = None
-    folder_id: UUID | None = None
-    endpoint_name: str | None = None
-    mcp_enabled: bool | None = None
-    locked: bool | None = None
-    action_name: str | None = None
-    action_description: str | None = None
-    access_type: AccessTypeEnum | None = None
-    fs_path: str | None = None
+    name: Union[str, None] = None
+    description: Union[str, None] = None
+    data: Union[dict, None] = Field(default=None, sa_column=Column(JSON))
+    folder_id: Union[UUIDstr, None] = None
+    endpoint_name: Union[str, None] = None
+    mcp_enabled: Union[bool, None] = None
+    locked: Union[bool, None] = None
+    action_name: Union[str, None] = None
+    action_description: Union[str, None] = None
+    access_type: Union[AccessTypeEnum, None] = None
+    fs_path: Union[str, None] = None
 
     @field_validator("endpoint_name")
     @classmethod

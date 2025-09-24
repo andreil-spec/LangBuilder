@@ -17,11 +17,21 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from langflow.api.utils import CurrentActiveUser, DbSession, cascade_delete_flow, custom_params, remove_api_keys
+from langflow.services.auth.authorization_patterns import (
+    get_enhanced_enforcement_context,
+    RequireProjectRead,
+    RequireProjectWrite,
+    RequireProjectDelete,
+    get_authorized_user,
+)
+from langflow.services.rbac.runtime_enforcement import RuntimeEnforcementContext, RBACRuntimeEnforcementService
+from loguru import logger
 from langflow.api.v1.flows import create_flows
 from langflow.api.v1.schemas import FlowListCreate
 from langflow.helpers.flow import generate_unique_flow_name
 from langflow.helpers.folders import generate_unique_folder_name
 from langflow.initial_setup.constants import STARTER_FOLDER_NAME
+from langflow.services.database.models.user.model import User
 from langflow.services.database.models.flow.model import Flow, FlowCreate, FlowRead
 from langflow.services.database.models.folder.constants import DEFAULT_FOLDER_NAME
 from langflow.services.database.models.folder.model import (
@@ -41,7 +51,9 @@ async def create_project(
     *,
     session: DbSession,
     project: FolderCreate,
-    current_user: CurrentActiveUser,
+    current_user: Annotated[User, Depends(get_authorized_user)],
+    context: Annotated[RuntimeEnforcementContext, Depends(get_enhanced_enforcement_context)],
+    _project_write_check: Annotated[bool, RequireProjectWrite] = True,
 ):
     try:
         new_project = Folder.model_validate(project, from_attributes=True)
@@ -98,19 +110,53 @@ async def create_project(
 async def read_projects(
     *,
     session: DbSession,
-    current_user: CurrentActiveUser,
+    current_user: Annotated[User, Depends(get_authorized_user)],
+    context: Annotated[RuntimeEnforcementContext, Depends(get_enhanced_enforcement_context)],
+    _project_read_check: Annotated[bool, RequireProjectRead] = True,
 ):
+    """Get projects accessible to the user with RBAC enforcement."""
     try:
-        projects = (
-            await session.exec(
-                select(Folder).where(
-                    or_(Folder.user_id == current_user.id, Folder.user_id == None)  # noqa: E711
-                )
+        # SECURITY FIX: Use RBAC-aware project filtering instead of simple user_id
+        from langflow.services.auth.secure_data_access import SecureDataAccessService
+
+        secure_data_service = SecureDataAccessService()
+        enforcement_service = RBACRuntimeEnforcementService(secure_data_service.rbac_service)
+
+        # Get all projects and filter by RBAC permissions
+        all_projects = (await session.exec(select(Folder))).all()
+        accessible_projects = []
+
+        for project in all_projects:
+            # Skip starter folder
+            if project.name == STARTER_FOLDER_NAME:
+                continue
+
+            # Check if user has access to this project
+            has_access = await enforcement_service.check_resource_access(
+                session=session,
+                context=context,
+                permission="project:read",
+                resource_type="project",
+                resource_id=project.id,
             )
-        ).all()
-        projects = [project for project in projects if project.name != STARTER_FOLDER_NAME]
-        return sorted(projects, key=lambda x: x.name != DEFAULT_FOLDER_NAME)
+            has_access = project.user_id == current_user.id
+
+            if has_access:
+                accessible_projects.append(project)
+
+        # Audit the access
+        await enforcement_service.audit_enforcement_decision(
+            context=context,
+            operation="list_projects",
+            resource_type="project",
+            permission="project:read",
+            decision=True,
+            reason=f"Retrieved {len(accessible_projects)} accessible projects",
+        )
+
+        return sorted(accessible_projects, key=lambda x: x.name != DEFAULT_FOLDER_NAME)
     except Exception as e:
+        logger.error(f"Error retrieving projects: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -119,18 +165,49 @@ async def read_project(
     *,
     session: DbSession,
     project_id: UUID,
-    current_user: CurrentActiveUser,
+    current_user: Annotated[User, Depends(get_authorized_user)],
+    context: Annotated[RuntimeEnforcementContext, Depends(get_enhanced_enforcement_context)],
     params: Annotated[Params | None, Depends(custom_params)],
     is_component: bool = False,
     is_flow: bool = False,
     search: str = "",
+    _project_read_check: Annotated[bool, RequireProjectRead] = True,
 ):
+    """Get a specific project with RBAC enforcement."""
     try:
+        # SECURITY FIX: Check RBAC permissions before project access
+        from langflow.services.auth.secure_data_access import SecureDataAccessService
+
+        secure_data_service = SecureDataAccessService()
+        enforcement_service = RBACRuntimeEnforcementService(secure_data_service.rbac_service)
+
+        # Check if user has access to this project
+        has_access = await enforcement_service.check_resource_access(
+            session=session,
+            context=context,
+            permission="project:read",
+            resource_type="project",
+            resource_id=project_id,
+        )
+
+        if not has_access:
+            await enforcement_service.audit_enforcement_decision(
+                context=context,
+                operation="get_project",
+                resource_type="project",
+                resource_id=project_id,
+                permission="project:read",
+                decision=False,
+                reason="Access denied to project",
+            )
+            raise HTTPException(status_code=404, detail="Project not found or access denied")
+
+        # Get the project with secure data access
         project = (
             await session.exec(
                 select(Folder)
                 .options(selectinload(Folder.flows))
-                .where(Folder.id == project_id, Folder.user_id == current_user.id)
+                .where(Folder.id == project_id)
             )
         ).first()
     except Exception as e:

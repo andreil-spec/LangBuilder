@@ -2,14 +2,17 @@ import asyncio
 
 import pydantic
 from anyio import BrokenResourceError
-from fastapi import APIRouter, HTTPException, Request, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from loguru import logger
 from mcp import types
 from mcp.server import NotificationOptions, Server
 from mcp.server.sse import SseServerTransport
 
-from langflow.api.utils import CurrentActiveMCPUser
+from langflow.api.utils import CurrentActiveMCPUser, DbSession
+from langflow.services.auth.mcp_auth import get_mcp_authorized_user, RequireMCPConnect
 from langflow.api.v1.mcp_utils import (
     current_user_ctx,
     handle_call_tool,
@@ -81,7 +84,11 @@ async def im_alive():
 
 
 @router.get("/sse", response_class=StreamingResponse)
-async def handle_sse(request: Request, current_user: CurrentActiveMCPUser):
+async def handle_sse(
+    request: Request,
+    current_user: Annotated[CurrentActiveMCPUser, Depends(get_mcp_authorized_user)],
+    _mcp_connect_check: Annotated[bool, RequireMCPConnect],
+):
     msg = f"Starting SSE connection, server name: {server.name}"
     logger.info(msg)
     token = current_user_ctx.set(current_user)
@@ -126,7 +133,10 @@ async def handle_sse(request: Request, current_user: CurrentActiveMCPUser):
 
 
 @router.post("/")
-async def handle_messages(request: Request):
+async def handle_messages(
+    request: Request,
+    current_user: Annotated[CurrentActiveMCPUser, Depends(get_mcp_authorized_user)],
+):
     try:
         await sse.handle_post_message(request.scope, request.receive, request._send)
     except (BrokenResourceError, BrokenPipeError) as e:

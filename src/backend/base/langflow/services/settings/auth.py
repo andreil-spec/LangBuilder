@@ -27,11 +27,20 @@ class AuthSettings(BaseSettings):
     API_KEY_ALGORITHM: str = "HS256"
     API_V1_STR: str = "/api/v1"
 
-    AUTO_LOGIN: bool = True
-    """If True, the application will attempt to log in automatically as a super user."""
-    skip_auth_auto_login: bool = True
-    """If True, the application will skip authentication when AUTO_LOGIN is enabled.
-    This will be removed in v1.6"""
+    # Security settings with environment-based defaults
+    @property
+    def AUTO_LOGIN(self) -> bool:
+        """Auto-login setting with security validation."""
+        from langflow.services.settings.security_config import get_security_config
+
+        return get_security_config().auto_login_enabled
+
+    @property
+    def skip_auth_auto_login(self) -> bool:
+        """Skip authentication setting with security validation."""
+        from langflow.services.settings.security_config import get_security_config
+
+        return get_security_config().skip_authentication
 
     NEW_USER_IS_ACTIVE: bool = False
     SUPERUSER: str = DEFAULT_SUPERUSER
@@ -68,7 +77,15 @@ class AuthSettings(BaseSettings):
     @field_validator("SUPERUSER", "SUPERUSER_PASSWORD", mode="before")
     @classmethod
     def validate_superuser(cls, value, info):
-        if info.data.get("AUTO_LOGIN"):
+        try:
+            from langflow.services.settings.security_config import get_security_config
+
+            auto_login = get_security_config().auto_login_enabled
+        except Exception:
+            # Fallback to False if security config not available
+            auto_login = False
+
+        if auto_login:
             if value != DEFAULT_SUPERUSER:
                 value = DEFAULT_SUPERUSER
                 logger.debug("Resetting superuser to default value")

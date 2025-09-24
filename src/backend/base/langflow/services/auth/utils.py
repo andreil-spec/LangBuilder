@@ -489,48 +489,59 @@ def decrypt_api_key(encrypted_api_key: str, settings_service: SettingsService):
     return ""
 
 
-# MCP-specific authentication functions that always behave as if skip_auth_auto_login is True
+# MCP-specific authentication functions with secure defaults
 async def get_current_user_mcp(
     token: Annotated[str, Security(oauth2_login)],
     query_param: Annotated[str, Security(api_key_query)],
     header_param: Annotated[str, Security(api_key_header)],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
-    """MCP-specific user authentication that always allows fallback to username lookup.
+    """MCP-specific user authentication with secure defaults.
 
-    This function provides authentication for MCP endpoints with special handling:
+    This function provides secure authentication for MCP endpoints:
     - If a JWT token is provided, it uses standard JWT authentication
-    - If no API key is provided and AUTO_LOGIN is enabled, it falls back to
-      username lookup using the configured superuser credentials
-    - Otherwise, it validates the provided API key (from query param or header)
+    - API key authentication is required unless explicitly bypassed in development
+    - No fallback authentication bypass - proper credentials always required
+    - Security validation based on environment configuration
     """
     if token:
         return await get_current_user_by_jwt(token, db)
 
-    # MCP-specific authentication logic - always behaves as if skip_auth_auto_login is True
+    # Use secure authentication logic with environment validation
+    from langflow.services.settings.security_config import get_security_config
+
     settings_service = get_settings_service()
+    security_config = get_security_config()
     result: ApiKey | User | None
 
-    if settings_service.auth_settings.AUTO_LOGIN:
-        # Get the first user
+    # SECURITY FIX: Only allow authentication bypass in development with explicit skip_auth setting
+    if (
+        security_config.auto_login_enabled
+        and security_config.skip_authentication
+        and security_config.environment.value == "development"
+    ):
+        # Development-only fallback with strict validation
         if not settings_service.auth_settings.SUPERUSER:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Missing first superuser credentials",
             )
         if not query_param and not header_param:
-            # For MCP endpoints, always fall back to username lookup when no API key is provided
+            logger.warning(
+                "🚨 SECURITY WARNING: MCP authentication bypass enabled in development mode. "
+                "This should NEVER be used in production!"
+            )
             result = await get_user_by_username(db, settings_service.auth_settings.SUPERUSER)
             if result:
-                logger.warning(AUTO_LOGIN_WARNING)
                 return result
         else:
             result = await check_key(db, query_param or header_param)
 
+    # Production-secure path: Always require proper authentication
     elif not query_param and not header_param:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="An API key must be passed as query or header",
+            detail="MCP endpoints require valid API key authentication",
         )
 
     elif query_param:
@@ -542,7 +553,7 @@ async def get_current_user_mcp(
     if not result:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or missing API key",
+            detail="Invalid or missing API key for MCP access",
         )
 
     # If result is a User, return it directly
@@ -553,7 +564,7 @@ async def get_current_user_mcp(
     # This should not happen in normal flow, but adding for completeness
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Invalid authentication result",
+        detail="Invalid authentication result for MCP access",
     )
 
 

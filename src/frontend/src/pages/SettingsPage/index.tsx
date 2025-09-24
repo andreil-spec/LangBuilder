@@ -1,5 +1,6 @@
 import { Outlet, type To } from "react-router-dom";
 import SideBarButtonsComponent from "@/components/core/sidebarComponent";
+import { useRBACPermissions } from "@/components/rbac";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { CustomStoreSidebar } from "@/customization/components/custom-store-sidebar";
 import {
@@ -14,9 +15,15 @@ import PageLayout from "../../components/common/pageLayout";
 export default function SettingsPage(): JSX.Element {
   const autoLogin = useAuthStore((state) => state.autoLogin);
   const hasStore = useStoreStore((state) => state.hasStore);
+  const { canManageUsers, canViewRoles, canManageWorkspace } =
+    useRBACPermissions();
 
   // Hides the General settings if there is nothing to show
   const showGeneralSettings = ENABLE_PROFILE_ICONS || hasStore || !autoLogin;
+
+  // Show RBAC admin if user has any RBAC management permissions
+  const showRBACAdmin =
+    canManageUsers || canViewRoles || canManageWorkspace("");
 
   const sidebarNavItems: {
     href?: string;
@@ -80,6 +87,20 @@ export default function SettingsPage(): JSX.Element {
       ),
     },
   );
+
+  // Add RBAC Admin navigation item if user has permissions
+  if (showRBACAdmin) {
+    sidebarNavItems.push({
+      title: "RBAC Admin",
+      href: "/settings/rbac-admin",
+      icon: (
+        <ForwardedIconComponent
+          name="Shield"
+          className="w-4 flex-shrink-0 justify-start stroke-[1.5]"
+        />
+      ),
+    });
+  }
 
   // TODO: Remove this on cleanup
   if (!ENABLE_DATASTAX_LANGFLOW) {

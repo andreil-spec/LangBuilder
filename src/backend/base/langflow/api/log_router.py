@@ -3,9 +3,10 @@ import json
 from http import HTTPStatus
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from langflow.api.utils import CurrentActiveUser
 from langflow.logging.logger import log_buffer
 
 log_router = APIRouter(tags=["Log"])
@@ -54,13 +55,23 @@ async def event_generator(request: Request):
 @log_router.get("/logs-stream")
 async def stream_logs(
     request: Request,
+    current_user: CurrentActiveUser,
 ):
     """HTTP/2 Server-Sent-Event (SSE) endpoint for streaming logs.
 
     It establishes a long-lived connection to the server and receives log messages in real-time.
     The client should use the header "Accept: text/event-stream".
+
+    Requires authentication and appropriate permissions to access system logs.
     """
     global log_buffer  # noqa: PLW0602
+
+    # RBAC: Check if user has permission to read system logs
+    # TODO: Integrate with permission engine to check system:logs:read permission
+    # For now, require superuser access
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail="Insufficient permissions to access system logs")
+
     if log_buffer.enabled() is False:
         raise HTTPException(
             status_code=HTTPStatus.NOT_IMPLEMENTED,
@@ -72,11 +83,20 @@ async def stream_logs(
 
 @log_router.get("/logs")
 async def logs(
+    current_user: CurrentActiveUser,
     lines_before: Annotated[int, Query(description="The number of logs before the timestamp or the last log")] = 0,
     lines_after: Annotated[int, Query(description="The number of logs after the timestamp")] = 0,
     timestamp: Annotated[int, Query(description="The timestamp to start getting logs from")] = 0,
 ):
+    """Get system logs with authentication and permission checks."""
     global log_buffer  # noqa: PLW0602
+
+    # RBAC: Check if user has permission to read system logs
+    # TODO: Integrate with permission engine to check system:logs:read permission
+    # For now, require superuser access
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail="Insufficient permissions to access system logs")
+
     if log_buffer.enabled() is False:
         raise HTTPException(
             status_code=HTTPStatus.NOT_IMPLEMENTED,
