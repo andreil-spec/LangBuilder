@@ -512,6 +512,11 @@ export default function ScopedRoleAssignmentModal({
                                   +{role.permissions.length - 3} more
                                 </Badge>
                               )}
+                              {!role.permissions && role.permission_count > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  {role.permission_count} permissions
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </CardContent>

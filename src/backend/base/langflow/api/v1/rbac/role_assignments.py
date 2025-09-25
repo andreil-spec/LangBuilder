@@ -480,7 +480,7 @@ async def delete_role_assignment(
 
     try:
         assignment = await session.get(RoleAssignment, assignment_id)
-        if not assignment or not assignment.is_active:
+        if not assignment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Role assignment not found"
@@ -503,10 +503,8 @@ async def delete_role_assignment(
                     detail=f"Insufficient permissions to delete assignments in this workspace: {result.reason}"
                 )
 
-        # Soft delete by marking as inactive
-        assignment.is_active = False
-        assignment.updated_at = datetime.now(timezone.utc)
-
+        # Hard delete - remove the assignment completely
+        await session.delete(assignment)
         await session.commit()
 
         # Create audit log entry

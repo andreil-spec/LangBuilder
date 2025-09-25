@@ -268,11 +268,37 @@ async def list_roles(
                 "ignore", category=DeprecationWarning, module=r"fastapi_pagination\.ext\.sqlalchemy"
             )
             paginated_result = await apaginate(session, statement, params=params)
-            return [RoleRead.model_validate(role) for role in paginated_result.items]
+            roles = paginated_result.items
     else:
         result = await session.exec(statement)
         roles = result.all()
-        return [RoleRead.model_validate(role) for role in roles]
+
+    # Populate permission_count and assignment_count for each role
+    role_reads = []
+    for role in roles:
+        role_dict = role.model_dump()
+
+        # Calculate permission count
+        from langflow.services.database.models.rbac.permission import RolePermission
+        permission_count_stmt = select(func.count(RolePermission.id)).where(
+            RolePermission.role_id == role.id,
+            RolePermission.is_granted == True
+        )
+        permission_count_result = await session.exec(permission_count_stmt)
+        role_dict["permission_count"] = permission_count_result.first() or 0
+
+        # Calculate assignment count
+        from langflow.services.database.models.rbac.role_assignment import RoleAssignment
+        assignment_count_stmt = select(func.count(RoleAssignment.id)).where(
+            RoleAssignment.role_id == role.id,
+            RoleAssignment.is_active == True
+        )
+        assignment_count_result = await session.exec(assignment_count_stmt)
+        role_dict["assignment_count"] = assignment_count_result.first() or 0
+
+        role_reads.append(RoleRead(**role_dict))
+
+    return role_reads
 
 
 @router.get("/{role_id}", response_model=RoleRead)
@@ -319,7 +345,28 @@ async def get_role(
             detail="Access denied to system roles"
         )
 
-    return RoleRead.model_validate(role)
+    # Populate permission_count and assignment_count for the role
+    role_dict = role.model_dump()
+
+    # Calculate permission count
+    from langflow.services.database.models.rbac.permission import RolePermission
+    permission_count_stmt = select(func.count(RolePermission.id)).where(
+        RolePermission.role_id == role.id,
+        RolePermission.is_granted == True
+    )
+    permission_count_result = await session.exec(permission_count_stmt)
+    role_dict["permission_count"] = permission_count_result.first() or 0
+
+    # Calculate assignment count
+    from langflow.services.database.models.rbac.role_assignment import RoleAssignment
+    assignment_count_stmt = select(func.count(RoleAssignment.id)).where(
+        RoleAssignment.role_id == role.id,
+        RoleAssignment.is_active == True
+    )
+    assignment_count_result = await session.exec(assignment_count_stmt)
+    role_dict["assignment_count"] = assignment_count_result.first() or 0
+
+    return RoleRead(**role_dict)
 
 
 @router.put("/{role_id}", response_model=RoleRead)

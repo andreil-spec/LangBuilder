@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { useGetAutoLogin } from "@/controllers/API/queries/auth";
 import { useGetRoleAssignments } from "@/controllers/API/queries/rbac/use-get-role-assignments";
+import { useDeleteRoleAssignment } from "@/controllers/API/queries/rbac/use-delete-role-assignment";
 import useAuthStore from "@/stores/authStore";
 import AuthenticationModal from "../../../RBAC/components/AuthenticationModal";
 import ScopedRoleAssignmentModal from "../ScopedRoleAssignment";
@@ -30,6 +31,7 @@ export default function RoleAssignments() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showScopedAssignmentModal, setShowScopedAssignmentModal] =
     useState(false);
+  const [deletingAssignments, setDeletingAssignments] = useState<Set<string>>(new Set());
 
   // Authentication state - following AccountMenu pattern
   const { isAdmin } = useAuthStore((state) => ({
@@ -52,6 +54,30 @@ export default function RoleAssignments() {
     error,
     // @ts-ignore - Temporary suppress for testing
   } = useGetRoleAssignments();
+
+  const { mutate: deleteRoleAssignment } = useDeleteRoleAssignment({
+    onSuccess: (data, variables) => {
+      console.log("✅ Role assignment deleted successfully");
+      // Remove from deleting state
+      setDeletingAssignments(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(variables.assignment_id);
+        return newSet;
+      });
+      // Refresh the assignments list
+      fetchRoleAssignments({});
+    },
+    onError: (error, variables) => {
+      console.error("❌ Failed to delete role assignment:", error);
+      // Remove from deleting state
+      setDeletingAssignments(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(variables.assignment_id);
+        return newSet;
+      });
+      alert(`Failed to delete role assignment: ${error?.message || "Unknown error"}`);
+    },
+  });
 
   // Handle role assignments success
   useEffect(() => {
@@ -88,6 +114,20 @@ export default function RoleAssignments() {
       // Refresh the data without search parameter (API doesn't support search)
       fetchRoleAssignments({});
     });
+  };
+
+  const handleDeleteAssignment = (assignmentId: string) => {
+    if (!isAdmin) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    if (confirm("Are you sure you want to delete this role assignment?")) {
+      console.log("Deleting role assignment:", assignmentId);
+      // Add to deleting state
+      setDeletingAssignments(prev => new Set(prev).add(assignmentId));
+      deleteRoleAssignment({ assignment_id: assignmentId });
+    }
   };
 
   // Client-side filtering for search functionality
@@ -222,12 +262,15 @@ export default function RoleAssignments() {
                       {new Date(assignment.assigned_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm">
-                        <IconComponent
-                          name="MoreHorizontal"
-                          className="h-4 w-4"
-                        />
-                      </Button>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleDeleteAssignment(assignment.id)}
+                          disabled={!isAdmin || deletingAssignments.has(assignment.id)}
+                          className="text-red-600 hover:text-red-800 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {deletingAssignments.has(assignment.id) ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
