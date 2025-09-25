@@ -120,7 +120,33 @@ async def list_role_assignments(
 
         logger.info(f"Listed {len(assignments)} role assignments for user {current_user.id}")
 
-        return [RoleAssignmentRead.model_validate(assignment) for assignment in assignments]
+        # Convert to response format with populated names
+        assignment_reads = []
+        for assignment in assignments:
+            # Build the response with populated names
+            assignment_dict = assignment.model_dump()
+
+            # Fetch and populate role name
+            if assignment.role_id:
+                role = await session.get(Role, assignment.role_id)
+                if role:
+                    assignment_dict["role_name"] = role.name
+
+            # Fetch and populate user name
+            if assignment.user_id:
+                user = await session.get(User, assignment.user_id)
+                if user:
+                    assignment_dict["user_name"] = user.username or f"{user.first_name or ''} {user.last_name or ''}".strip() or None
+
+            # Fetch and populate assigned_by name
+            if assignment.assigned_by_id:
+                assigned_by = await session.get(User, assignment.assigned_by_id)
+                if assigned_by:
+                    assignment_dict["assigned_by_name"] = assigned_by.username or f"{assigned_by.first_name or ''} {assigned_by.last_name or ''}".strip() or None
+
+            assignment_reads.append(RoleAssignmentRead(**assignment_dict))
+
+        return assignment_reads
 
     except HTTPException:
         raise
@@ -323,8 +349,21 @@ async def create_role_assignment(
         logger.info(f"   Workspace ID: {assignment_data.workspace_id}")
         logger.info(f"   Assigned by: {current_user.id}")
 
+        # Build the response with populated names using already-fetched objects
+        assignment_dict = db_assignment.model_dump()
+
+        # Populate role name (role object already fetched for validation above)
+        assignment_dict["role_name"] = role.name
+
+        # Populate user name (target_user already fetched for validation above)
+        if assignment_data.user_id and 'target_user' in locals():
+            assignment_dict["user_name"] = target_user.username or f"{target_user.first_name or ''} {target_user.last_name or ''}".strip() or None
+
+        # Populate assigned_by name (current_user already available)
+        assignment_dict["assigned_by_name"] = current_user.username or f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or None
+
         # Return the created assignment
-        return RoleAssignmentRead.model_validate(db_assignment)
+        return RoleAssignmentRead(**assignment_dict)
 
     except HTTPException:
         raise
@@ -382,8 +421,29 @@ async def get_role_assignment(
                     detail=f"Insufficient permissions to read this assignment: {result.reason}"
                 )
 
+        # Build the response with populated names
+        assignment_dict = assignment.model_dump()
+
+        # Fetch and populate role name
+        if assignment.role_id:
+            role = await session.get(Role, assignment.role_id)
+            if role:
+                assignment_dict["role_name"] = role.name
+
+        # Fetch and populate user name
+        if assignment.user_id:
+            user = await session.get(User, assignment.user_id)
+            if user:
+                assignment_dict["user_name"] = user.username or f"{user.first_name or ''} {user.last_name or ''}".strip() or None
+
+        # Fetch and populate assigned_by name
+        if assignment.assigned_by_id:
+            assigned_by = await session.get(User, assignment.assigned_by_id)
+            if assigned_by:
+                assignment_dict["assigned_by_name"] = assigned_by.username or f"{assigned_by.first_name or ''} {assigned_by.last_name or ''}".strip() or None
+
         logger.info(f"Retrieved role assignment {assignment_id} for user {current_user.id}")
-        return RoleAssignmentRead.model_validate(assignment)
+        return RoleAssignmentRead(**assignment_dict)
 
     except HTTPException:
         raise
