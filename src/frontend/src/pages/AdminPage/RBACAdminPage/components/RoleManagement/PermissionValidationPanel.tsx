@@ -614,7 +614,7 @@ export default function PermissionValidationPanel({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center space-x-2">
                               <span className="font-medium">
-                                {permission.name}
+                                {permission.code || `${permission.action}:${permission.resource_type}`}
                               </span>
 
                               <Badge variant="outline" className="text-xs">

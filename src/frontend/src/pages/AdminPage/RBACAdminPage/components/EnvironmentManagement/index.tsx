@@ -284,6 +284,12 @@ export default function EnvironmentManagement() {
   const environments = environmentsData?.environments || [];
   const projects = projectsData?.projects || [];
 
+  // Create a project map for easy lookup
+  const projectMap = projects.reduce((map, project) => {
+    map[project.id] = project;
+    return map;
+  }, {} as Record<string, Project>);
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -411,27 +417,41 @@ export default function EnvironmentManagement() {
                   </TableCell>
                 </TableRow>
               ) : (
-                environments.map((env) => (
-                  <TableRow key={env.id}>
-                    <TableCell className="font-medium">{env.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{env.type}</Badge>
-                    </TableCell>
-                    <TableCell>{env.project_id}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={env.is_active ? "default" : "destructive"}
-                      >
-                        {env.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {env.last_deployed_at
-                        ? new Date(env.last_deployed_at).toLocaleDateString()
-                        : "Never"}
-                    </TableCell>
-                  </TableRow>
-                ))
+                environments.map((env) => {
+                  const project = projectMap[env.project_id];
+                  return (
+                    <TableRow key={env.id}>
+                      <TableCell className="font-medium">{env.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{env.type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">
+                            {project?.name || "Unknown Project"}
+                          </div>
+                          {project?.description && (
+                            <div className="text-sm text-gray-500">
+                              {project.description}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={env.is_active ? "default" : "destructive"}
+                        >
+                          {env.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {env.last_deployed_at
+                          ? new Date(env.last_deployed_at).toLocaleDateString()
+                          : "Never"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
