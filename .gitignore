@@ -6,6 +6,15 @@ CLAUDE.md
 ARCHITECTURE_SUMMARY.md
 DOCUMENTATION_INDEX.md
 
+# Old credentials backup (never commit - contains actual secrets)
+openwebui/old credentials/
+openwebui/credentials-warning.md
+
+# Credential files (keep local, never commit)
+openwebui/secrets/google-service-account.json
+openwebui/backend/.env_1
+openwebui/env
+
 # Logs
 logs
 *.log
