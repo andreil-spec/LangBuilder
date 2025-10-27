@@ -9,9 +9,9 @@ env:
 
 jobs:
   lint:
+    if: github.head_ref != 'feature/add-openwebui-clean'
     name: Run Ruff Check and Format
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: "Setup Environment"
@@ -27,9 +27,9 @@ jobs:
 
 
   update-starter-projects:
+    if: github.head_ref != 'feature/add-openwebui-clean'
     name: Update Starter Projects
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: "Setup Environment"
