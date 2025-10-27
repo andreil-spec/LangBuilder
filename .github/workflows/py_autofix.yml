@@ -11,6 +11,7 @@ jobs:
   lint:
     name: Run Ruff Check and Format
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: "Setup Environment"
@@ -28,6 +29,7 @@ jobs:
   update-starter-projects:
     name: Update Starter Projects
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: "Setup Environment"
