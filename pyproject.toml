@@ -277,7 +277,7 @@ directory = "coverage"
 
 
 [tool.ruff]
-exclude = ["src/backend/base/langbuilder/alembic/*", "src/frontend/tests/assets/*"]
+exclude = ["src/backend/base/langbuilder/alembic/*", "src/frontend/tests/assets/*", "openwebui/*"]
 line-length = 120
 
 [tool.ruff.lint]
