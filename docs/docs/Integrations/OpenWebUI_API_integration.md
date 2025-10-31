@@ -6,7 +6,9 @@ This guide explains how to expose LangBuilder flows through the built-in OpenAI-
 
 - LangBuilder running locally (for example `make backend` or `langbuilder run`)
 - Open WebUI `v0.6.34` or newer
-- A LangBuilder API key (create one under **Settings → API Keys**)
+- One of:
+  - LangBuilder API key (legacy mode), or
+  - Keycloak/OpenID Connect configured for LangBuilder + Open WebUI (preferred)
 
 ## 1. Start LangBuilder
 
@@ -32,6 +34,26 @@ curl -H "Authorization: Bearer <LANGBUILDER_API_KEY>" \
 ```
 
 Your flow should appear as `lb:<endpoint-name>` (or `lb:<flow-id>` if no endpoint name is defined).
+
+## 2.1. Enable Keycloak SSO (OIDC) *(optional, recommended)*
+
+LangBuilder can now validate the Open WebUI session token directly, so you do not need to distribute API keys. Configure the following environment variables for the LangBuilder backend:
+
+| Variable | Description |
+| --- | --- |
+| `LANGBUILDER_OIDC_ENABLED=true` | Turn on OIDC validation. |
+| `LANGBUILDER_OIDC_ISSUER=https://<keycloak-host>/realms/<realm>` | Keycloak realm issuer URL. |
+| `LANGBUILDER_OIDC_AUDIENCE=langbuilder-api` | Client ID/Audience expected in the access token. |
+| `LANGBUILDER_OIDC_ADDITIONAL_AUDIENCES=openwebui` | (Optional) Accept additional audiences, comma separated. |
+| `LANGBUILDER_OIDC_RESOURCE_CLIENT_IDS=langbuilder-api` | (Optional) Collect client-specific roles for RBAC. |
+| `LANGBUILDER_OIDC_RBAC_TAG_PREFIX=group:` | (Optional) Prefix used when tagging flows with required groups. |
+
+Keycloak already forwards Open WebUI’s access token to LangBuilder. When OIDC is enabled:
+
+- Requests **without** a bearer token receive **401 Unauthorized**.
+- Requests with a valid token are accepted; roles/groups from the token enforce RBAC.
+
+To restrict a flow to a group, add a tag with the configured prefix. With the default prefix, adding the tag `group:builder` makes that flow visible only to users whose token lists the `builder` group or role.
 
 ## 3. Run Open WebUI against LangBuilder
 
@@ -60,8 +82,9 @@ After the container starts:
 
 ## Troubleshooting
 
-- **401 Unauthorized** – Ensure you are using a LangBuilder API key and the base URL ends with `/v1`.
+- **401 Unauthorized** – Provide either a valid LangBuilder API key or an OIDC bearer token. When OIDC is enabled, the token must match the configured issuer/audience.
 - **No models listed** – Confirm the flow has an endpoint name and the `curl /v1/models` check returns it.
+- **Model missing for a specific user** – Verify the flow tags include the appropriate group prefix (`group:<name>`) and that the user’s Keycloak token contains that group or role.
 - **Empty responses** – The shim responds with non-streaming completions but gracefully ignores `stream=true`; refresh LangBuilder to ensure you have the latest build.
 - **Docker networking** – Use the appropriate host when setting `OPENAI_API_BASE_URL`; Linux containers cannot resolve `host.docker.internal`.
 
