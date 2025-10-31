@@ -53,6 +53,22 @@ class AuthSettings(BaseSettings):
     COOKIE_DOMAIN: str | None = None
     """The domain attribute of the cookies. If None, the domain is not set."""
 
+    # OIDC configuration for external identity providers
+    OIDC_ENABLED: bool = False
+    OIDC_ISSUER: str | None = None
+    OIDC_AUDIENCE: str | None = None
+    OIDC_ADDITIONAL_AUDIENCES: list[str] = Field(default_factory=list)
+    OIDC_JWKS_URL: str | None = None
+    OIDC_JWKS_CACHE_SECONDS: int = 300
+    OIDC_GROUPS_CLAIM: str | None = "groups"
+    OIDC_ROLES_PATHS: list[str] = Field(default_factory=lambda: ["realm_access.roles"])
+    OIDC_RESOURCE_CLIENT_IDS: list[str] = Field(default_factory=list)
+    OIDC_USERNAME_CLAIM: str = "preferred_username"
+    OIDC_NAME_CLAIM: str | None = "name"
+    OIDC_EMAIL_CLAIM: str | None = "email"
+    OIDC_RBAC_TAG_PREFIX: str = "group:"
+    OIDC_CLOCK_SKEW_SECONDS: int = 60
+
     pwd_context: CryptContext = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
     model_config = SettingsConfigDict(validate_assignment=True, extra="ignore", env_prefix="LANGBUILDER_")
@@ -79,6 +95,24 @@ class AuthSettings(BaseSettings):
             return value
 
         return value
+
+    @field_validator("OIDC_ADDITIONAL_AUDIENCES", "OIDC_ROLES_PATHS", "OIDC_RESOURCE_CLIENT_IDS", mode="before")
+    @classmethod
+    def parse_str_list(cls, value):
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, list | tuple | set):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return []
+
+    @field_validator("OIDC_RBAC_TAG_PREFIX", mode="before")
+    @classmethod
+    def validate_rbac_prefix(cls, value):
+        if value is None or value == "":
+            return "group:"
+        return value.strip()
 
     @field_validator("SECRET_KEY", mode="before")
     @classmethod
