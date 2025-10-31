@@ -14,9 +14,15 @@ from sqlmodel import select
 from langbuilder.api.v1.endpoints import simple_run_flow
 from langbuilder.api.v1.schemas import SimplifiedAPIRequest
 from langbuilder.helpers.flow import get_flow_by_id_or_endpoint_name
+from langbuilder.services.auth.oidc import (
+    AuthenticatedCaller,
+    build_authenticated_caller_from_oidc,
+    build_authenticated_caller_from_user,
+    get_oidc_verifier,
+)
 from langbuilder.services.auth.utils import api_key_header, api_key_query, api_key_security
 from langbuilder.services.database.models.flow.model import AccessTypeEnum, Flow, FlowRead
-from langbuilder.services.deps import session_scope
+from langbuilder.services.deps import get_settings_service, session_scope
 
 if TYPE_CHECKING:
     from langbuilder.services.database.models.user.model import UserRead
@@ -114,34 +120,57 @@ async def _resolve_current_user(
     authorization: str | None = Header(default=None),
     query_key: Annotated[str | None, Security(api_key_query)] = None,
     header_key: Annotated[str | None, Security(api_key_header)] = None,
-) -> UserRead:
+) -> AuthenticatedCaller:
     """Resolve the LangBuilder user based on OpenAI-style headers.
 
     OpenAI clients typically send API keys via the Authorization header (Bearer ...)
     while LangBuilder also supports the x-api-key header/query parameter. We accept
     either format and delegate to the shared api_key_security helper.
     """
+    auth_settings = get_settings_service().auth_settings
+
     bearer_key: str | None = None
     if authorization and authorization.lower().startswith("bearer "):
         bearer_key = authorization.split(" ", 1)[1].strip()
-    token = bearer_key or header_key or query_key
-    return await api_key_security(query_key or token, header_key or token)
+
+    oidc_error: HTTPException | None = None
+    if bearer_key and auth_settings.OIDC_ENABLED:
+        verifier = get_oidc_verifier()
+        try:
+            identity = await verifier.verify(bearer_key)
+            return build_authenticated_caller_from_oidc(identity)
+        except HTTPException as exc:
+            oidc_error = exc
+            # Fallback to API key validation afterwards if possible.
+
+    query_candidate = query_key
+    header_candidate = header_key
+    if bearer_key and not (header_candidate or query_candidate):
+        # Allow legacy clients that send Bearer <API_KEY>
+        header_candidate = bearer_key
+
+    if query_candidate or header_candidate:
+        user = await api_key_security(query_candidate, header_candidate)
+        if user:
+            return build_authenticated_caller_from_user(user)
+
+    if oidc_error:
+        raise oidc_error
+
+    raise HTTPException(status_code=401, detail="Missing or invalid authentication credentials")
 
 
-async def _fetch_accessible_flows(user: UserRead) -> list[Flow]:
+async def _fetch_accessible_flows(user: AuthenticatedCaller) -> list[Flow]:
     """Return flows that the caller can access via the OpenAI shim."""
     async with session_scope() as session:
-        stmt = (
-            select(Flow)
-            .where(Flow.is_component == False)  # noqa: E712
-            .where(
-                or_(
-                    Flow.user_id == user.id,
-                    Flow.access_type == AccessTypeEnum.PUBLIC,
-                )
-            )
-        )
-        return list((await session.exec(stmt)).all())
+        stmt = select(Flow).where(Flow.is_component == False)  # noqa: E712
+        filters = [Flow.access_type == AccessTypeEnum.PUBLIC]
+        if user.id:
+            filters.append(Flow.user_id == user.id)
+        stmt = stmt.where(or_(*filters))
+        flows = list((await session.exec(stmt)).all())
+
+    return _apply_rbac(flow_list=flows, user=user)
 
 
 def _model_identifier(flow: Flow, *, include_prefix: bool = True) -> str:
@@ -191,16 +220,62 @@ def _build_flow_lookup(flows: list[Flow]) -> dict[str, FlowRead]:
     return lookup
 
 
-def _ensure_flow_access(flow: FlowRead, user: UserRead) -> None:
+def _ensure_flow_access(flow: FlowRead, user: AuthenticatedCaller) -> None:
     if flow.access_type == AccessTypeEnum.PUBLIC:
+        _ensure_flow_group_access(flow, user)
         return
-    if flow.user_id and flow.user_id == user.id:
+    if flow.user_id and user.id and flow.user_id == user.id:
+        _ensure_flow_group_access(flow, user)
         return
-    raise HTTPException(status_code=403, detail="Flow is not accessible with this API key")
+    raise HTTPException(status_code=403, detail="Flow is not accessible with these credentials")
+
+
+def _apply_rbac(flow_list: list[Flow], user: AuthenticatedCaller) -> list[Flow]:
+    auth_settings = get_settings_service().auth_settings
+    prefix = auth_settings.OIDC_RBAC_TAG_PREFIX.strip() if auth_settings.OIDC_RBAC_TAG_PREFIX else ""
+    if not prefix:
+        return flow_list
+    if user.source != "oidc":
+        return flow_list
+
+    memberships = user.all_memberships()
+    allowed: list[Flow] = []
+    for flow in flow_list:
+        required = _extract_required_groups(flow.tags, prefix)
+        if not required or memberships & required:
+            allowed.append(flow)
+    return allowed
+
+
+def _ensure_flow_group_access(flow: FlowRead, user: AuthenticatedCaller) -> None:
+    auth_settings = get_settings_service().auth_settings
+    prefix = auth_settings.OIDC_RBAC_TAG_PREFIX.strip() if auth_settings.OIDC_RBAC_TAG_PREFIX else ""
+    if not prefix or user.source != "oidc":
+        return
+    required = _extract_required_groups(flow.tags, prefix)
+    if not required:
+        return
+    if not (user.all_memberships() & required):
+        raise HTTPException(status_code=403, detail="Flow requires a group membership that is not present")
+
+
+def _extract_required_groups(tags: list[str] | None, prefix: str) -> set[str]:
+    if not tags:
+        return set()
+    normalized_prefix = prefix.lower()
+    groups: set[str] = set()
+    for tag in tags:
+        if not isinstance(tag, str):
+            continue
+        if tag.lower().startswith(normalized_prefix):
+            value = tag[len(prefix) :].strip()
+            if value:
+                groups.add(value.lower())
+    return groups
 
 
 @router.get("/v1/models")
-async def list_models(current_user: Annotated[UserRead, Depends(_resolve_current_user)]):
+async def list_models(current_user: Annotated[AuthenticatedCaller, Depends(_resolve_current_user)]):
     flows = await _fetch_accessible_flows(current_user)
     if not flows:
         return {"object": "list", "data": []}
@@ -208,7 +283,7 @@ async def list_models(current_user: Annotated[UserRead, Depends(_resolve_current
 
 
 @router.post("/v1/chat/completions")
-async def chat(req: ChatRequest, current_user: Annotated[UserRead, Depends(_resolve_current_user)]):
+async def chat(req: ChatRequest, current_user: Annotated[AuthenticatedCaller, Depends(_resolve_current_user)]):
     if req.stream:
         # OpenWebUI may set stream=true by default; we currently respond non-streaming.
         req.stream = False  # type: ignore[assignment]
@@ -226,7 +301,10 @@ async def chat(req: ChatRequest, current_user: Annotated[UserRead, Depends(_reso
     if flow_read is None:
         # attempt to resolve via helper that checks DB + permissions
         target_identifier = flow_key
-        flow_read = await get_flow_by_id_or_endpoint_name(target_identifier, user_id=str(current_user.id))
+        flow_read = await get_flow_by_id_or_endpoint_name(
+            target_identifier,
+            user_id=str(current_user.id) if current_user.id else None,
+        )
         _ensure_flow_access(flow_read, current_user)
     else:
         _ensure_flow_access(flow_read, current_user)
@@ -237,7 +315,11 @@ async def chat(req: ChatRequest, current_user: Annotated[UserRead, Depends(_reso
         input_type="chat",
         output_type="chat",
     )
-    run_response = await simple_run_flow(flow=flow_read, input_request=simplified_request, api_key_user=current_user)
+    run_response = await simple_run_flow(
+        flow=flow_read,
+        input_request=simplified_request,
+        api_key_user=current_user.user,
+    )
     lb_json = run_response.model_dump()
     text = _extract_text(lb_json)
 
