@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_ENABLED: true
+      KC_DB: dev-mem
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
+      KC_HOSTNAME_ADMIN_URL: http://localhost:8080
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_BACKCHANNEL: false
+    ports:
+      - "8080:8080"
+      - "9000:9000" 
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: 127.0.0.1:9000\\r\\nConnection: close\\r\\n\\r\\n' >&3; timeout 2 cat <&3 | grep -m 1 status | grep -m 1 UP || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  langbuilder-backend:
+    build:
+      context: .
+      dockerfile: docker/build_and_push.Dockerfile
+      target: runtime
+    command: ["langbuilder", "run", "--host", "0.0.0.0", "--port", "7860", "--backend-only"]
+    container_name: langbuilder-backend-dev
+    environment:
+      LANGBUILDER_OIDC_ENABLED: "true"
+      LANGBUILDER_OIDC_ISSUER: http://keycloak:8080/realms/company
+      LANGBUILDER_OIDC_AUDIENCE: langbuilder-api
+      LANGBUILDER_OIDC_ADDITIONAL_AUDIENCES: '["openwebui"]'
+      LANGBUILDER_OIDC_RESOURCE_CLIENT_IDS: '["langbuilder-api"]'
+      LANGBUILDER_OIDC_RBAC_TAG_PREFIX: "group:"
+      LANGBUILDER_DATABASE_URL: postgresql://langbuilder:langbuilder@postgres:5432/langbuilder
+      LANGBUILDER_CONFIG_DIR: /tmp/langbuilder
+      LANGBUILDER_SECRET_KEY: "8f3d9a7b2e1c6f4a9d8b7e3f1c5a9b7d6e4f2a8c7b9d3e6f1a4b8c7d9e2f5a3b"
+      LANGBUILDER_LOG_LEVEL: debug
+      LANGBUILDER_DEV: "true"
+    ports:
+      - "7860:7860"
+    volumes:
+      - langbuilder-data:/app/langbuilder
+      - ./src:/app/src 
+      - ./pyproject.toml:/app/pyproject.toml
+    networks:
+      - auth-network
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  langbuilder-frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/build_and_push_frontend.Dockerfile
+    container_name: langbuilder-frontend-dev
+    environment:
+      BACKEND_URL: http://langbuilder-backend:7860
+      FRONTEND_PORT: 3000
+    ports:
+      - "3000:3000"
+    networks:
+      - auth-network
+    depends_on:
+      langbuilder-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_USER: langbuilder
+      POSTGRES_PASSWORD: langbuilder
+      POSTGRES_DB: langbuilder
+    ports:
+      - "5432:5432"
+    volumes:
+      - langbuilder-postgres:/var/lib/postgresql/data
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langbuilder"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  openwebui:
+    build:
+      context: ./openwebui
+      dockerfile: Dockerfile
+    container_name: openwebui
+    environment:
+      DEFAULT_USER_ROLE: user
+      ENABLE_OAUTH_SIGNUP: "true"
+      ENABLE_LOGIN_FORM: "false"
+      ENABLE_SIGNUP: "false"
+      OAUTH_PROVIDER_NAME: Keycloak
+      OAUTH_CLIENT_ID: openwebui
+      OAUTH_CLIENT_SECRET: ${OPENWEBUI_CLIENT_SECRET:-changeme}
+      OPENID_PROVIDER_URL: http://keycloak:8080/realms/company/.well-known/openid-configuration
+      OPENID_REDIRECT_URI: http://localhost:8000/oauth/oidc/callback
+      WEBUI_URL: http://localhost:8000
+      ENABLE_OAUTH_ROLE_MANAGEMENT: "true"
+      OAUTH_ROLES_CLAIM: realm_access.roles
+      OAUTH_ALLOWED_ROLES: user,admin
+      OAUTH_ADMIN_ROLES: admin
+      # OAuth Token Forwarding Configuration
+      OPENAI_API_BASE_URLS: '["http://langbuilder-backend:7860/v1"]'
+      OPENAI_API_KEYS: '[""]'
+      OPENAI_API_CONFIGS: |
+        {
+          "0": {
+            "name": "LangBuilder",
+            "url": "http://langbuilder-backend:7860/v1",
+            "auth_type": "system_oauth",
+            "enable": true
+          }
+        }
+    ports:
+      - "8000:8080"
+    volumes:
+      - openwebui-data:/app/backend/data
+    networks:
+      - auth-network
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      langbuilder-backend:
+        condition: service_healthy
+
+networks:
+  auth-network:
+    driver: bridge
+
+volumes:
+  langbuilder-data:
+  langbuilder-postgres:
+  openwebui-data:
